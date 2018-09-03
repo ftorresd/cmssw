@@ -16,6 +16,10 @@
 #include "CondFormats/RPCObjects/interface/RPCDeadStrips.h"
 #include "RecoLocalMuon/RPCRecHit/interface/RPCRecHitBaseAlgo.h"
 
+// #include "DataFormats/RPCRecHit/interface/RPCRecHitCollection.h"
+// #include "Geometry/RPCGeometry/interface/RPCRoll.h"
+// #include "Geometry/RPCGeometry/interface/RPCGeometry.h"
+
 class RPCRecHitProducer : public edm::stream::EDProducer<> {
 
 public:
@@ -34,6 +38,10 @@ public:
 private:
   // The label to be used to retrieve RPC digis from the event
   const edm::EDGetTokenT<RPCDigiCollection> theRPCDigiLabel;
+  const edm::EDGetTokenT<RPCDigiCollection> theRPCTwinMuxDigiLabel;
+  const edm::EDGetTokenT<RPCDigiCollection> theRPCOMTFDigiLabel;
+  const edm::EDGetTokenT<RPCDigiCollection> theRPCCPPFDigiLabel;
+
   //  edm::InputTag theRPCDigiLabel;
 
   // The reconstruction algorithm
@@ -49,6 +57,13 @@ private:
 
   std::vector<RPCMaskedStrips::MaskItem> MaskVec;
   std::vector<RPCDeadStrips::DeadItem> DeadVec;
+
+  // check if the input is from legacy readout
+  bool isLegacy;
+
+  // The method which produces the rechits for each digi collection
+  // void fillRPCRecHits(RPCDigiCollection * digis, RPCGeometry * rpcGeom, RPCRecHitCollection * recHitCollection);
+
 
 };
 

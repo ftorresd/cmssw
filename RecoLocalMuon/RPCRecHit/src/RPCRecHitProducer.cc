@@ -28,7 +28,11 @@ using namespace std;
 
 RPCRecHitProducer::RPCRecHitProducer(const ParameterSet& config):
   theRPCDigiLabel(consumes<RPCDigiCollection>(config.getParameter<InputTag>("rpcDigiLabel"))),
-  maskSource_(MaskSource::EventSetup), deadSource_(MaskSource::EventSetup)
+  theRPCTwinMuxDigiLabel(consumes<RPCDigiCollection>(config.getParameter<InputTag>("rpcTwinMuxDigiLabel"))),
+  theRPCOMTFDigiLabel(consumes<RPCDigiCollection>(config.getParameter<InputTag>("rpcOMTFDigiLabel"))),
+  theRPCCPPFDigiLabel(consumes<RPCDigiCollection>(config.getParameter<InputTag>("rpcCPPFDigiLabel"))),
+  maskSource_(MaskSource::EventSetup), deadSource_(MaskSource::EventSetup),
+  isLegacy(config.getParameter<bool>("isLegacy"))
 {
   // Set verbose output
   produces<RPCRecHitCollection>();
@@ -123,8 +127,26 @@ void RPCRecHitProducer::produce(Event& event, const EventSetup& setup) {
   setup.get<MuonGeometryRecord>().get(rpcGeom);
 
   // Get the digis from the event
-  Handle<RPCDigiCollection> digis; 
-  event.getByToken(theRPCDigiLabel,digis);
+  // Legacy
+  Handle<RPCDigiCollection> Legacy_digis; 
+  // Handle<RPCDigiCollection> digis; 
+  event.getByToken(theRPCDigiLabel,Legacy_digis);
+  // event.getByToken(theRPCDigiLabel,digis);
+  // TwinMux
+  Handle<RPCDigiCollection> TwinMux_digis; 
+  event.getByToken(theRPCTwinMuxDigiLabel,TwinMux_digis);
+  // OMTF
+  Handle<RPCDigiCollection> OMTF_digis; 
+  event.getByToken(theRPCOMTFDigiLabel,OMTF_digis);
+  // CPFF
+  Handle<RPCDigiCollection> CPPF_digis; 
+  event.getByToken(theRPCCPPFDigiLabel,CPPF_digis);
+
+  // // set legacy as default
+  // auto digis = &Legacy_digis;
+  // if (!isLegacy) {
+  //   // do something
+  // }
 
   // Pass the EventSetup to the algo
   theAlgo->setES(setup);
@@ -133,46 +155,261 @@ void RPCRecHitProducer::produce(Event& event, const EventSetup& setup) {
   auto recHitCollection = std::make_unique<RPCRecHitCollection>();
 
   // Iterate through all digi collections ordered by LayerId   
+  // for ( auto rpcdgIt = digis->begin(); rpcdgIt != digis->end(); ++rpcdgIt ) {
+  //   // The layerId
+  //   const RPCDetId& rpcId = (*rpcdgIt).first;
 
-  for ( auto rpcdgIt = digis->begin(); rpcdgIt != digis->end(); ++rpcdgIt ) {
-    // The layerId
-    const RPCDetId& rpcId = (*rpcdgIt).first;
+  //   // Get the GeomDet from the setup
+  //   const RPCRoll* roll = rpcGeom->roll(rpcId);
+  //   if (roll == nullptr){
+  //     edm::LogError("BadDigiInput")<<"Failed to find RPCRoll for ID "<<rpcId;
+  //     continue;
+  //   }
 
-    // Get the GeomDet from the setup
-    const RPCRoll* roll = rpcGeom->roll(rpcId);
-    if (roll == nullptr){
-      edm::LogError("BadDigiInput")<<"Failed to find RPCRoll for ID "<<rpcId;
-      continue;
-    }
+  //   // Get the iterators over the digis associated with this LayerId
+  //   const RPCDigiCollection::Range& range = (*rpcdgIt).second;
 
-    // Get the iterators over the digis associated with this LayerId
-    const RPCDigiCollection::Range& range = (*rpcdgIt).second;
+  //   // Getting the roll mask, that includes dead strips, for the given RPCDet
+  //   RollMask mask;
+  //   const int rawId = rpcId.rawId();
+  //   for ( const auto& tomask : theRPCMaskedStripsObj->MaskVec ) {
+  //     if ( tomask.rawId == rawId ) {
+  //       const int bit = tomask.strip;
+  //       mask.set(bit-1);
+  //     }
+  //   }
 
-    // Getting the roll mask, that includes dead strips, for the given RPCDet
-    RollMask mask;
-    const int rawId = rpcId.rawId();
-    for ( const auto& tomask : theRPCMaskedStripsObj->MaskVec ) {
-      if ( tomask.rawId == rawId ) {
-        const int bit = tomask.strip;
-        mask.set(bit-1);
-      }
-    }
+  //   for ( const auto& tomask : theRPCDeadStripsObj->DeadVec ) {
+  //     if ( tomask.rawId == rawId ) {
+  //       const int bit = tomask.strip;
+  //       mask.set(bit-1);
+  //     }
+  //   }
 
-    for ( const auto& tomask : theRPCDeadStripsObj->DeadVec ) {
-      if ( tomask.rawId == rawId ) {
-        const int bit = tomask.strip;
-        mask.set(bit-1);
-      }
-    }
-
-    // Call the reconstruction algorithm    
-    OwnVector<RPCRecHit> recHits = theAlgo->reconstruct(*roll, rpcId, range, mask);
+  //   // Call the reconstruction algorithm    
+  //   OwnVector<RPCRecHit> recHits = theAlgo->reconstruct(*roll, rpcId, range, mask);
     
-    if(!recHits.empty()) //FIXME: is it really needed?
-      recHitCollection->put(rpcId, recHits.begin(), recHits.end());
+  //   if(!recHits.empty()) //FIXME: is it really needed?
+  //     recHitCollection->put(rpcId, recHits.begin(), recHits.end());
+  // }
+
+  if (isLegacy) {
+    //////////////////////////////
+    // legacy  
+    for ( auto rpcdgIt = Legacy_digis->begin(); rpcdgIt != Legacy_digis->end(); ++rpcdgIt ) {
+      // The layerId
+      const RPCDetId& rpcId = (*rpcdgIt).first;
+
+      // Get the GeomDet from the setup
+      const RPCRoll* roll = rpcGeom->roll(rpcId);
+      if (roll == nullptr){
+        edm::LogError("BadDigiInput")<<"Failed to find RPCRoll for ID "<<rpcId;
+        continue;
+      }
+
+      // Get the iterators over the digis associated with this LayerId
+      const RPCDigiCollection::Range& range = (*rpcdgIt).second;
+
+      // Getting the roll mask, that includes dead strips, for the given RPCDet
+      RollMask mask;
+      const int rawId = rpcId.rawId();
+      for ( const auto& tomask : theRPCMaskedStripsObj->MaskVec ) {
+        if ( tomask.rawId == rawId ) {
+          const int bit = tomask.strip;
+          mask.set(bit-1);
+        }
+      }
+
+      for ( const auto& tomask : theRPCDeadStripsObj->DeadVec ) {
+        if ( tomask.rawId == rawId ) {
+          const int bit = tomask.strip;
+          mask.set(bit-1);
+        }
+      }
+
+      // Call the reconstruction algorithm    
+      OwnVector<RPCRecHit> recHits = theAlgo->reconstruct(*roll, rpcId, range, mask);
+      
+      if(!recHits.empty()) //FIXME: is it really needed?
+        recHitCollection->put(rpcId, recHits.begin(), recHits.end());
+    }
+  } else {
+    //////////////////////////////
+    // TwinMux 
+    for ( auto rpcdgIt = TwinMux_digis->begin(); rpcdgIt != TwinMux_digis->end(); ++rpcdgIt ) {
+      // The layerId
+      const RPCDetId& rpcId = (*rpcdgIt).first;
+
+      // Get the GeomDet from the setup
+      const RPCRoll* roll = rpcGeom->roll(rpcId);
+      if (roll == nullptr){
+        edm::LogError("BadDigiInput")<<"Failed to find RPCRoll for ID "<<rpcId;
+        continue;
+      }
+
+      // Get the iterators over the digis associated with this LayerId
+      const RPCDigiCollection::Range& range = (*rpcdgIt).second;
+
+      // Getting the roll mask, that includes dead strips, for the given RPCDet
+      RollMask mask;
+      const int rawId = rpcId.rawId();
+      for ( const auto& tomask : theRPCMaskedStripsObj->MaskVec ) {
+        if ( tomask.rawId == rawId ) {
+          const int bit = tomask.strip;
+          mask.set(bit-1);
+        }
+      }
+
+      for ( const auto& tomask : theRPCDeadStripsObj->DeadVec ) {
+        if ( tomask.rawId == rawId ) {
+          const int bit = tomask.strip;
+          mask.set(bit-1);
+        }
+      }
+
+      // Call the reconstruction algorithm    
+      OwnVector<RPCRecHit> recHits = theAlgo->reconstruct(*roll, rpcId, range, mask);
+      
+      if(!recHits.empty()) //FIXME: is it really needed?
+        recHitCollection->put(rpcId, recHits.begin(), recHits.end());
+    }
+
+    //////////////////////////////
+    // OMTF 
+    for ( auto rpcdgIt = OMTF_digis->begin(); rpcdgIt != OMTF_digis->end(); ++rpcdgIt ) {
+      // The layerId
+      const RPCDetId& rpcId = (*rpcdgIt).first;
+      
+      // clear overlaps
+      if ( !((rpcId.region() == -1 || rpcId.region() == 1) &&  (rpcId.ring() == 3) && (rpcId.station() == 1 || rpcId.station() == 2)) ) 
+        continue; // accpets only rings: RE-2_R3 ; RE-1_R3 ; RE+1_R3 ; RE+2_R3 ; 
+      // if ( rpcId.region() == 0 && (rpcId.ring() == -2 || rpcId.ring() == 2) ) // W_-2 ; W_+2
+      //   continue;
+      // if (rpcId.region() == -1 || rpcId.region() == 1) {
+      //   if (rpcId.ring() == 2 && (rpcId.station() == -1 || rpcId.station() == -1) ) // RE+1_R2 ; RE-1_R2 
+      //     continue;
+      //   if (rpcId.ring() == 3 && (rpcId.station() == -3 || rpcId.station() == -3) ) // RE+3_R3 ; RE-3_R3
+      //     continue;
+      // }
+
+      // Get the GeomDet from the setup
+      const RPCRoll* roll = rpcGeom->roll(rpcId);
+      if (roll == nullptr){
+        edm::LogError("BadDigiInput")<<"Failed to find RPCRoll for ID "<<rpcId;
+        continue;
+      }
+
+      // Get the iterators over the digis associated with this LayerId
+      const RPCDigiCollection::Range& range = (*rpcdgIt).second;
+
+      // Getting the roll mask, that includes dead strips, for the given RPCDet
+      RollMask mask;
+      const int rawId = rpcId.rawId();
+      for ( const auto& tomask : theRPCMaskedStripsObj->MaskVec ) {
+        if ( tomask.rawId == rawId ) {
+          const int bit = tomask.strip;
+          mask.set(bit-1);
+        }
+      }
+
+      for ( const auto& tomask : theRPCDeadStripsObj->DeadVec ) {
+        if ( tomask.rawId == rawId ) {
+          const int bit = tomask.strip;
+          mask.set(bit-1);
+        }
+      }
+
+      // Call the reconstruction algorithm    
+      OwnVector<RPCRecHit> recHits = theAlgo->reconstruct(*roll, rpcId, range, mask);
+      
+      if(!recHits.empty()) //FIXME: is it really needed?
+        recHitCollection->put(rpcId, recHits.begin(), recHits.end());
+    }   
+
+    ////////////////////////////// 
+    // CPPF
+    for ( auto rpcdgIt = CPPF_digis->begin(); rpcdgIt != CPPF_digis->end(); ++rpcdgIt ) {
+      // The layerId
+      const RPCDetId& rpcId = (*rpcdgIt).first;
+
+      // Get the GeomDet from the setup
+      const RPCRoll* roll = rpcGeom->roll(rpcId);
+      if (roll == nullptr){
+        edm::LogError("BadDigiInput")<<"Failed to find RPCRoll for ID "<<rpcId;
+        continue;
+      }
+
+      // Get the iterators over the digis associated with this LayerId
+      const RPCDigiCollection::Range& range = (*rpcdgIt).second;
+
+      // Getting the roll mask, that includes dead strips, for the given RPCDet
+      RollMask mask;
+      const int rawId = rpcId.rawId();
+      for ( const auto& tomask : theRPCMaskedStripsObj->MaskVec ) {
+        if ( tomask.rawId == rawId ) {
+          const int bit = tomask.strip;
+          mask.set(bit-1);
+        }
+      }
+
+      for ( const auto& tomask : theRPCDeadStripsObj->DeadVec ) {
+        if ( tomask.rawId == rawId ) {
+          const int bit = tomask.strip;
+          mask.set(bit-1);
+        }
+      }
+
+      // Call the reconstruction algorithm    
+      OwnVector<RPCRecHit> recHits = theAlgo->reconstruct(*roll, rpcId, range, mask);
+      
+      if(!recHits.empty()) //FIXME: is it really needed?
+        recHitCollection->put(rpcId, recHits.begin(), recHits.end());
+    } 
   }
+  
 
   event.put(std::move(recHitCollection));
 
 }
+
+// // The method which produces the rechits for each digi collection
+// void RPCRecHitProducer::fillRPCRecHits(RPCDigiCollection * digis, RPCGeometry * rpcGeom, RPCRecHitCollection * recHitCollection) {
+//   for ( auto rpcdgIt = digis->begin(); rpcdgIt != digis->end(); ++rpcdgIt ) {
+//     // The layerId
+//     const RPCDetId& rpcId = (*rpcdgIt).first;
+
+//     // Get the GeomDet from the setup
+//     const RPCRoll* roll = rpcGeom->roll(rpcId);
+//     if (roll == nullptr){
+//       edm::LogError("BadDigiInput")<<"Failed to find RPCRoll for ID "<<rpcId;
+//       continue;
+//     }
+
+//     // Get the iterators over the digis associated with this LayerId
+//     const RPCDigiCollection::Range& range = (*rpcdgIt).second;
+
+//     // Getting the roll mask, that includes dead strips, for the given RPCDet
+//     RollMask mask;
+//     const int rawId = rpcId.rawId();
+//     for ( const auto& tomask : theRPCMaskedStripsObj->MaskVec ) {
+//       if ( tomask.rawId == rawId ) {
+//         const int bit = tomask.strip;
+//         mask.set(bit-1);
+//       }
+//     }
+
+//     for ( const auto& tomask : theRPCDeadStripsObj->DeadVec ) {
+//       if ( tomask.rawId == rawId ) {
+//         const int bit = tomask.strip;
+//         mask.set(bit-1);
+//       }
+//     }
+
+//     // Call the reconstruction algorithm    
+//     OwnVector<RPCRecHit> recHits = theAlgo->reconstruct(*roll, rpcId, range, mask);
+    
+//     if(!recHits.empty()) //FIXME: is it really needed?
+//       recHitCollection->put(rpcId, recHits.begin(), recHits.end());
+//   }
+// }
 
